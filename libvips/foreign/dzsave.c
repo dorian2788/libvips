@@ -162,11 +162,9 @@
 
  */
 
-/*
-#define DEBUG_VERBOSE
-#define VIPS_DEBUG
-#define DEBUG
- */
+// #define DEBUG_VERBOSE
+// #define VIPS_DEBUG
+// #define DEBUG
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -603,8 +601,7 @@ vips_gsf_path( VipsGsfDirectory *tree, const char *name, ... )
 	 * path we are creating.
 	 */
 	tree->file_count += 1;
-	tree->filename_lengths += 
-		strlen( tree->out->name ) + strlen( name ) + 1;
+	tree->filename_lengths += strlen( tree->out->name ) + strlen( name ) + 1;
 
 	dir = tree; 
 	va_start( ap, name );
@@ -1613,6 +1610,34 @@ strip_allocate( VipsThreadState *state, void *a, gboolean *stop )
 		return( 0 );
 	}
 
+  gboolean all_exists = TRUE;
+
+	char dirname[VIPS_PATH_MAX];
+  char filepath[VIPS_PATH_MAX];
+
+  int y_coord =	layer->y / layer->dz->tile_size;
+  vips_snprintf( dirname, VIPS_PATH_MAX, "%d", layer->n );
+
+  for (int i = 0; i < layer->tiles_across; i++) {
+    //added this so when it runs again it will not include the levels it has already done
+    vips_snprintf(filepath, VIPS_PATH_MAX, "%s/%s/%d_%d%s", layer->dz->root_name, 
+                  dirname, i, y_coord, layer->dz->file_suffix);
+    
+    if (access(filepath, F_OK) == -1) {
+      all_exists = FALSE;
+      break;
+    } else {
+      #ifdef DEBUG_VERBOSE
+        printf("Skipping: %s\n", filepath);
+      #endif /*DEBUG_VERBOSE*/
+    }
+  }
+
+  if (all_exists) {
+    *stop = TRUE;
+    return ( 0 );
+  }
+
 	image.left = 0;
 	image.top = 0;
 	image.width = layer->width;
@@ -1647,6 +1672,9 @@ tile_name( Layer *layer, int x, int y )
 	char name[VIPS_PATH_MAX];
 	char dirname[VIPS_PATH_MAX];
 	char dirname2[VIPS_PATH_MAX];
+
+  //added
+  // char filepath[VIPS_PATH_MAX];
 	Layer *p;
 	int n;
 
@@ -1655,6 +1683,9 @@ tile_name( Layer *layer, int x, int y )
 		vips_snprintf( dirname, VIPS_PATH_MAX, "%d", layer->n );
 		vips_snprintf( name, VIPS_PATH_MAX, 
 			"%d_%d%s", x, y, dz->file_suffix );
+
+
+
 
 		out = vips_gsf_path( dz->tree, name, 
 			dz->root_name, dirname, NULL );
@@ -1759,7 +1790,7 @@ tile_name( Layer *layer, int x, int y )
 	}
 
 #ifdef DEBUG_VERBOSE
-	printf( "tile_name: writing to %s\n", name );
+	printf( "tile_name: writing to %s/%s/%s\n", dz->root_name, dirname, name );
 #endif /*DEBUG_VERBOSE*/
 
 	return( out );
@@ -1828,6 +1859,24 @@ strip_work( VipsThreadState *state, void *a )
 	printf( "strip_work\n" );
 #endif /*DEBUG_VERBOSE*/
 
+	char name[VIPS_PATH_MAX];
+	char dirname[VIPS_PATH_MAX];
+  char filepath[VIPS_PATH_MAX];
+
+	int x_coord = state->x / dz->tile_size;
+  int y_coord =	state->y / dz->tile_size;
+  vips_snprintf( dirname, VIPS_PATH_MAX, "%d", layer->n );
+  vips_snprintf( name, VIPS_PATH_MAX, 
+    "%d_%d%s", x_coord, y_coord, dz->file_suffix );
+  
+  vips_snprintf(filepath, VIPS_PATH_MAX, "%s/%s/%s", dz->root_name, dirname, name);
+
+  if (access(filepath, F_OK) != -1) {
+    #ifdef DEBUG_VERBOSE
+      printf("Skipping: %s\n", filepath);
+    #endif /*DEBUG_VERBOSE*/
+    return ( 0 );
+  }
         /* killed is checked by sink_disc, but that's only once per strip, and
          * they can be huge. Check per output tile as well.
          */
@@ -1900,15 +1949,17 @@ strip_work( VipsThreadState *state, void *a )
 
 	g_mutex_unlock( vips__global_lock );
 
-	if( write_image( dz, out, x, dz->suffix ) ) {
+  //MODIFIED
+	if(write_image( dz, out, x, dz->suffix ) ) {
 		g_object_unref( out );
 		g_object_unref( x );
 
 		return( -1 );
 	}
 
-	g_object_unref( out );
-	g_object_unref( x );
+  //MODIFIED
+  g_object_unref( out );
+  g_object_unref( x );
 
 #ifdef DEBUG_VERBOSE
 	printf( "strip_work: success\n" );
